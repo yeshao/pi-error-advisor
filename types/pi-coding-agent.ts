@@ -1,4 +1,4 @@
-// Minimal type stubs for @earendil-works/pi-coding-agent used by pi-error-advisor.
+// Minimal type stubs for @earendil-works/pi-coding-agent used by pi-error-Advisor.
 // Only the members actually referenced are declared. At runtime under Pi, the
 // real package provides these; the stub exists so `tsc --noEmit` and vitest can
 // run standalone without the full coding-agent as a dev dependency.
@@ -86,6 +86,14 @@ export interface ExtensionUIContext {
 export interface ExtensionContext {
 	ui: ExtensionUIContext;
 	cwd: string;
+	currentModel?: string;
+}
+
+export interface CommandEndEvent {
+	type: "command_end";
+	name: string;
+	args: string;
+	error?: string;
 }
 
 export interface ExtensionAPI {
@@ -100,5 +108,9 @@ export interface ExtensionAPI {
 	on(
 		event: "session_compact",
 		handler: (event: SessionCompactEvent, ctx: ExtensionContext) => Promise<unknown>,
+	): void;
+	on(
+		event: "command_end",
+		handler: (event: CommandEndEvent, ctx: ExtensionContext) => Promise<unknown>,
 	): void;
 }
