@@ -15,7 +15,6 @@ pi-error-advisor synthesizes a short, clearly-labeled note into the outgoing req
 3. **Overflow recovery** — when the conversation exceeds the context window and Pi compacts it, the model learns the context budget may be limited. If compaction *didn't complete* (failure, auth problem, nothing to compact), the model is told to produce the shortest useful response and suggest `/compact` or a larger-context model.
 
 4. **Extension-command failures (Tier 3, opt-in)** — when upstream lands the `command_end` event, if an extension command handler threw, the model is told the command may not have completed and its output may be missing from the conversation.
-
 5. **Silence where it belongs** — user aborts (Ctrl+C during compaction or retry backoff), manual and threshold compaction, and anything after a successful assistant turn produce no notes at all.
 
 ## Why Request-Time, Not Persisted
@@ -83,7 +82,7 @@ The overflow-recovery path removes the error message from context before retryin
 
 ### Model-switch detection
 
-When the trailing error's model differs from the current request's model (available via `ctx.currentModel`), the overflow note is softened to avoid suggesting a model switch the user already made.
+When the trailing error's model differs from the current request's model (available via `ctx.model`), the overflow note is softened to avoid suggesting a model switch the user already made.
 
 ## Project Structure
 

@@ -5,7 +5,7 @@ import errorAdvisor from "../src/index.ts";
 
 type Handler = (event: unknown, ctx: unknown) => Promise<unknown>;
 
-function createFakePi(opts: { currentModel?: string } = {}) {
+function createFakePi(opts: { model?: { provider: string; id: string } } = {}) {
 	const handlers = new Map<string, Handler[]>();
 	const pi = {
 		on: (event: string, handler: Handler) => {
@@ -13,8 +13,10 @@ function createFakePi(opts: { currentModel?: string } = {}) {
 		},
 	};
 	const notify = vi.fn();
-	const ctx = { ui: { notify }, currentModel: opts.currentModel };
-	const emit = async (event: { type: string } & Record<string, unknown>): Promise<unknown> => {
+	const ctx = { ui: { notify }, model: opts.model };
+	const emit = async (
+		event: { type: string } & Record<string, unknown>,
+	): Promise<unknown> => {
 		let result: unknown;
 		for (const handler of handlers.get(event.type) ?? []) {
 			result = await handler(event, ctx);
@@ -46,13 +48,19 @@ function assistantMessage(overrides: Partial<AssistantMessage>): AgentMessage {
 }
 
 function userMessage(text: string): AgentMessage {
-	return { role: "user", content: [{ type: "text", text }], timestamp: Date.now() };
+	return {
+		role: "user",
+		content: [{ type: "text", text }],
+		timestamp: Date.now(),
+	};
 }
 
 function noteTexts(result: unknown, originalLength: number): string[] {
-	const messages = (result as { messages: AgentMessage[] } | undefined)?.messages ?? [];
+	const messages =
+		(result as { messages: AgentMessage[] } | undefined)?.messages ?? [];
 	return messages.slice(originalLength).map((m) => {
-		const content = (m as { content: Array<{ type: string; text?: string }> }).content;
+		const content = (m as { content: Array<{ type: string; text?: string }> })
+			.content;
 		return content[0]?.text ?? "";
 	});
 }
@@ -64,7 +72,10 @@ describe("error-advisor extension", () => {
 
 		const messages = [
 			userMessage("do the thing"),
-			assistantMessage({ stopReason: "error", errorMessage: "overloaded_error: try again later" }),
+			assistantMessage({
+				stopReason: "error",
+				errorMessage: "overloaded_error: try again later",
+			}),
 			userMessage("continue"),
 		];
 		const result = await emit({ type: "context", messages });
@@ -87,10 +98,16 @@ describe("error-advisor extension", () => {
 
 		const messages = [
 			userMessage("do the thing"),
-			assistantMessage({ stopReason: "error", errorMessage: "invalid x-api-key: authentication_error" }),
+			assistantMessage({
+				stopReason: "error",
+				errorMessage: "invalid x-api-key: authentication_error",
+			}),
 			userMessage("continue"),
 		];
-		const notes = noteTexts(await emit({ type: "context", messages }), messages.length);
+		const notes = noteTexts(
+			await emit({ type: "context", messages }),
+			messages.length,
+		);
 
 		expect(notes).toHaveLength(1);
 		expect(notes[0]).toContain("provider error");
@@ -104,9 +121,15 @@ describe("error-advisor extension", () => {
 
 		const messages = [
 			userMessage("do the thing"),
-			assistantMessage({ stopReason: "error", errorMessage: "overloaded_error" }),
+			assistantMessage({
+				stopReason: "error",
+				errorMessage: "overloaded_error",
+			}),
 			userMessage("continue"),
-			assistantMessage({ stopReason: "stop", content: [{ type: "text", text: "done" }] }),
+			assistantMessage({
+				stopReason: "stop",
+				content: [{ type: "text", text: "done" }],
+			}),
 			userMessage("next task"),
 		];
 		expect(await emit({ type: "context", messages })).toBeUndefined();
@@ -116,7 +139,10 @@ describe("error-advisor extension", () => {
 		const { pi, emit } = createFakePi();
 		errorAdvisor(pi);
 
-		const messages = [userMessage("do it"), assistantMessage({ stopReason: "aborted" })];
+		const messages = [
+			userMessage("do it"),
+			assistantMessage({ stopReason: "aborted" }),
+		];
 		expect(await emit({ type: "context", messages })).toBeUndefined();
 	});
 
@@ -124,11 +150,18 @@ describe("error-advisor extension", () => {
 		const { pi, emit } = createFakePi();
 		errorAdvisor(pi);
 
-		await emit({ type: "session_before_compact", reason: "overflow", signal: new AbortController().signal });
+		await emit({
+			type: "session_before_compact",
+			reason: "overflow",
+			signal: new AbortController().signal,
+		});
 		await emit({ type: "session_compact", reason: "overflow" });
 
 		const messages = [userMessage("hi")];
-		const notes = noteTexts(await emit({ type: "context", messages }), messages.length);
+		const notes = noteTexts(
+			await emit({ type: "context", messages }),
+			messages.length,
+		);
 		expect(notes).toHaveLength(1);
 		expect(notes[0]).toContain("automatically compacted");
 
@@ -140,10 +173,17 @@ describe("error-advisor extension", () => {
 		const { pi, emit, notify } = createFakePi();
 		errorAdvisor(pi);
 
-		await emit({ type: "session_before_compact", reason: "overflow", signal: new AbortController().signal });
+		await emit({
+			type: "session_before_compact",
+			reason: "overflow",
+			signal: new AbortController().signal,
+		});
 
 		const messages = [userMessage("hi")];
-		const notes = noteTexts(await emit({ type: "context", messages }), messages.length);
+		const notes = noteTexts(
+			await emit({ type: "context", messages }),
+			messages.length,
+		);
 		expect(notes).toHaveLength(1);
 		expect(notes[0]).toContain("did not complete");
 		expect(notify).toHaveBeenCalledOnce();
@@ -154,34 +194,62 @@ describe("error-advisor extension", () => {
 		errorAdvisor(pi);
 
 		const abortController = new AbortController();
-		await emit({ type: "session_before_compact", reason: "overflow", signal: abortController.signal });
+		await emit({
+			type: "session_before_compact",
+			reason: "overflow",
+			signal: abortController.signal,
+		});
 		abortController.abort();
 
-		expect(await emit({ type: "context", messages: [userMessage("hi")] })).toBeUndefined();
+		expect(
+			await emit({ type: "context", messages: [userMessage("hi")] }),
+		).toBeUndefined();
 	});
 
 	it("ignores manual and threshold compaction", async () => {
 		const { pi, emit } = createFakePi();
 		errorAdvisor(pi);
 
-		await emit({ type: "session_before_compact", reason: "manual", signal: new AbortController().signal });
+		await emit({
+			type: "session_before_compact",
+			reason: "manual",
+			signal: new AbortController().signal,
+		});
 		await emit({ type: "session_compact", reason: "manual" });
-		await emit({ type: "session_before_compact", reason: "threshold", signal: new AbortController().signal });
+		await emit({
+			type: "session_before_compact",
+			reason: "threshold",
+			signal: new AbortController().signal,
+		});
 		await emit({ type: "session_compact", reason: "threshold" });
 
-		expect(await emit({ type: "context", messages: [userMessage("hi")] })).toBeUndefined();
+		expect(
+			await emit({ type: "context", messages: [userMessage("hi")] }),
+		).toBeUndefined();
 	});
 
 	it("does not mutate the original messages array and marks notes non-display", async () => {
 		const { pi, emit } = createFakePi();
 		errorAdvisor(pi);
 
-		const messages = [userMessage("x"), assistantMessage({ stopReason: "error", errorMessage: "overloaded_error" })];
-		const result = (await emit({ type: "context", messages })) as { messages: AgentMessage[] };
+		const messages = [
+			userMessage("x"),
+			assistantMessage({
+				stopReason: "error",
+				errorMessage: "overloaded_error",
+			}),
+		];
+		const result = (await emit({ type: "context", messages })) as {
+			messages: AgentMessage[];
+		};
 
 		expect(messages).toHaveLength(2);
 		expect(result.messages).toHaveLength(3);
-		const note = result.messages[2] as { role: string; customType?: string; display?: boolean };
+		const note = result.messages[2] as {
+			role: string;
+			customType?: string;
+			display?: boolean;
+		};
 		expect(note.role).toBe("custom");
 		expect(note.customType).toBe("error-advisor");
 		expect(note.display).toBe(false);
@@ -196,7 +264,11 @@ describe("H-P4 — staleness on resume", () => {
 		const oldTimestamp = Date.now() - 16 * 60_000;
 		const messages = [
 			userMessage("do the thing"),
-			assistantMessage({ stopReason: "error", errorMessage: "overloaded_error", timestamp: oldTimestamp }),
+			assistantMessage({
+				stopReason: "error",
+				errorMessage: "overloaded_error",
+				timestamp: oldTimestamp,
+			}),
 			userMessage("continue days later"),
 		];
 		expect(await emit({ type: "context", messages })).toBeUndefined();
@@ -209,10 +281,17 @@ describe("H-P4 — staleness on resume", () => {
 		const recentTimestamp = Date.now() - 5 * 60_000;
 		const messages = [
 			userMessage("do the thing"),
-			assistantMessage({ stopReason: "error", errorMessage: "overloaded_error", timestamp: recentTimestamp }),
+			assistantMessage({
+				stopReason: "error",
+				errorMessage: "overloaded_error",
+				timestamp: recentTimestamp,
+			}),
 			userMessage("continue"),
 		];
-		const notes = noteTexts(await emit({ type: "context", messages }), messages.length);
+		const notes = noteTexts(
+			await emit({ type: "context", messages }),
+			messages.length,
+		);
 		expect(notes).toHaveLength(1);
 		expect(notes[0]).toContain("transient provider error");
 	});
@@ -220,7 +299,9 @@ describe("H-P4 — staleness on resume", () => {
 
 describe("H-P5 — model-switch mismatch", () => {
 	it("softens the overflow note when the model was switched", async () => {
-		const { pi, emit } = createFakePi({ currentModel: "claude-opus-4-20250514" });
+		const { pi, emit } = createFakePi({
+			model: { provider: "anthropic", id: "claude-opus-4-20250514" },
+		});
 		errorAdvisor(pi);
 
 		const messages = [
@@ -228,11 +309,15 @@ describe("H-P5 — model-switch mismatch", () => {
 			assistantMessage({
 				stopReason: "error",
 				errorMessage: "context_length_exceeded",
+				provider: "anthropic",
 				model: "claude-sonnet-4-20250514",
 			}),
 			userMessage("continue"),
 		];
-		const notes = noteTexts(await emit({ type: "context", messages }), messages.length);
+		const notes = noteTexts(
+			await emit({ type: "context", messages }),
+			messages.length,
+		);
 		expect(notes).toHaveLength(1);
 		expect(notes[0]).toContain("claude-sonnet-4-20250514");
 		expect(notes[0]).toContain("model was since switched");
@@ -241,7 +326,9 @@ describe("H-P5 — model-switch mismatch", () => {
 	});
 
 	it("does not flag same-model continuation", async () => {
-		const { pi, emit } = createFakePi({ currentModel: "claude-sonnet-4-20250514" });
+		const { pi, emit } = createFakePi({
+			model: { provider: "anthropic", id: "claude-sonnet-4-20250514" },
+		});
 		errorAdvisor(pi);
 
 		const messages = [
@@ -249,11 +336,15 @@ describe("H-P5 — model-switch mismatch", () => {
 			assistantMessage({
 				stopReason: "error",
 				errorMessage: "context_length_exceeded",
+				provider: "anthropic",
 				model: "claude-sonnet-4-20250514",
 			}),
 			userMessage("continue"),
 		];
-		const notes = noteTexts(await emit({ type: "context", messages }), messages.length);
+		const notes = noteTexts(
+			await emit({ type: "context", messages }),
+			messages.length,
+		);
 		expect(notes).toHaveLength(1);
 		expect(notes[0]).toContain("exceeded the model's context window");
 		// Same model → the "switch" suggestion is still appropriate
@@ -273,7 +364,10 @@ describe("H-P5 — model-switch mismatch", () => {
 			}),
 			userMessage("continue"),
 		];
-		const notes = noteTexts(await emit({ type: "context", messages }), messages.length);
+		const notes = noteTexts(
+			await emit({ type: "context", messages }),
+			messages.length,
+		);
 		expect(notes).toHaveLength(1);
 		// No currentModel → treat as same model, full note
 		expect(notes[0]).toContain("switch to a larger-context model");
@@ -287,18 +381,33 @@ describe("H-P6 — note cap", () => {
 		errorAdvisor(pi);
 
 		// Trigger compaction
-		await emit({ type: "session_before_compact", reason: "overflow", signal: new AbortController().signal });
+		await emit({
+			type: "session_before_compact",
+			reason: "overflow",
+			signal: new AbortController().signal,
+		});
 		await emit({ type: "session_compact", reason: "overflow" });
 
 		// Also trigger a trailing error AND a command_end error
-		await emit({ type: "command_end", name: "review", args: "", error: "template not found" });
+		await emit({
+			type: "command_end",
+			name: "review",
+			args: "",
+			error: "template not found",
+		});
 
 		const messages = [
 			userMessage("do the thing"),
-			assistantMessage({ stopReason: "error", errorMessage: "overloaded_error" }),
+			assistantMessage({
+				stopReason: "error",
+				errorMessage: "overloaded_error",
+			}),
 			userMessage("continue"),
 		];
-		const notes = noteTexts(await emit({ type: "context", messages }), messages.length);
+		const notes = noteTexts(
+			await emit({ type: "context", messages }),
+			messages.length,
+		);
 
 		// Should get compaction + error (priority), command note is dropped
 		expect(notes).toHaveLength(2);
@@ -308,15 +417,72 @@ describe("H-P6 — note cap", () => {
 	});
 });
 
+describe("H-P6 — deferred command-error consumption", () => {
+	it("retains the command error for the next request when capped away", async () => {
+		const { pi, emit } = createFakePi();
+		errorAdvisor(pi);
+
+		// Prime a command error, then trigger compaction + trailing error
+		// so both priority slots fill and the command note is capped away.
+		await emit({
+			type: "command_end",
+			name: "review",
+			args: "",
+			error: "template not found",
+		});
+		await emit({
+			type: "session_before_compact",
+			reason: "overflow",
+			signal: new AbortController().signal,
+		});
+		await emit({ type: "session_compact", reason: "overflow" });
+
+		const messages = [
+			userMessage("do the thing"),
+			assistantMessage({
+				stopReason: "error",
+				errorMessage: "overloaded_error",
+			}),
+			userMessage("continue"),
+		];
+		const cappedNotes = noteTexts(
+			await emit({ type: "context", messages }),
+			messages.length,
+		);
+
+		// Both priority slots filled → command note dropped.
+		expect(cappedNotes).toHaveLength(2);
+		expect(cappedNotes[0]).toContain("automatically compacted");
+		expect(cappedNotes[1]).toContain("transient provider error");
+
+		// Surviving request: command error was NOT consumed, so it surfaces now.
+		const nextNotes = noteTexts(
+			await emit({ type: "context", messages: [userMessage("again")] }),
+			1,
+		);
+		expect(nextNotes).toHaveLength(1);
+		expect(nextNotes[0]).toContain("/review command failed");
+		expect(nextNotes[0]).toContain("template not found");
+	});
+});
+
 describe("Tier 3 — extension-command failure (command_end event)", () => {
 	it("records a command_end error and advises on the next context", async () => {
 		const { pi, emit } = createFakePi();
 		errorAdvisor(pi);
 
-		await emit({ type: "command_end", name: "review", args: "", error: "template not found" });
+		await emit({
+			type: "command_end",
+			name: "review",
+			args: "",
+			error: "template not found",
+		});
 
 		const messages = [userMessage("continue")];
-		const notes = noteTexts(await emit({ type: "context", messages }), messages.length);
+		const notes = noteTexts(
+			await emit({ type: "context", messages }),
+			messages.length,
+		);
 
 		expect(notes).toHaveLength(1);
 		expect(notes[0]).toContain("/review command failed");
@@ -334,7 +500,9 @@ describe("Tier 3 — extension-command failure (command_end event)", () => {
 		const messages = [userMessage("hi")];
 
 		// First request gets the note.
-		expect(noteTexts(await emit({ type: "context", messages }), messages.length)).toHaveLength(1);
+		expect(
+			noteTexts(await emit({ type: "context", messages }), messages.length),
+		).toHaveLength(1);
 		// Second request: error already consumed.
 		expect(await emit({ type: "context", messages })).toBeUndefined();
 	});
@@ -353,7 +521,12 @@ describe("Tier 3 — extension-command failure (command_end event)", () => {
 		const { pi, emit } = createFakePi();
 		errorAdvisor(pi);
 
-		await emit({ type: "command_end", name: "bar", args: "", error: "timeout" });
+		await emit({
+			type: "command_end",
+			name: "bar",
+			args: "",
+			error: "timeout",
+		});
 		// Advance Date.now by >3 minutes.
 		const realNow = Date.now;
 		Date.now = () => realNow() + 4 * 60_000;

@@ -1,7 +1,12 @@
-// Minimal type stubs for @earendil-works/pi-coding-agent used by pi-error-Advisor.
+// Minimal type stubs for @earendil-works/pi-coding-agent used by pi-error-advisor.
 // Only the members actually referenced are declared. At runtime under Pi, the
 // real package provides these; the stub exists so `tsc --noEmit` and vitest can
 // run standalone without the full coding-agent as a dev dependency.
+//
+// Critical: this stub must mirror the real package, never be extended to make
+// the implementation compile. `pi-error-advisor` code must be written against the
+// real API surface (verified via the installed coding-agent package's d.ts) and
+// the stub narrowed to match — never the other way around.
 
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 
@@ -83,10 +88,16 @@ export interface ExtensionUIContext {
 	notify(message: string, level?: "info" | "warning" | "error"): void;
 }
 
+export interface ModelInfo {
+	provider: string;
+	id: string;
+}
+
 export interface ExtensionContext {
 	ui: ExtensionUIContext;
 	cwd: string;
-	currentModel?: string;
+	/** Current model (may be undefined). Mirrors real ExtensionContext.model. */
+	model?: ModelInfo;
 }
 
 export interface CommandEndEvent {
@@ -99,18 +110,30 @@ export interface CommandEndEvent {
 export interface ExtensionAPI {
 	on(
 		event: "context",
-		handler: (event: ContextEvent, ctx: ExtensionContext) => Promise<ContextEventResult | undefined>,
+		handler: (
+			event: ContextEvent,
+			ctx: ExtensionContext,
+		) => Promise<ContextEventResult | undefined>,
 	): void;
 	on(
 		event: "session_before_compact",
-		handler: (event: SessionBeforeCompactEvent, ctx: ExtensionContext) => Promise<unknown>,
+		handler: (
+			event: SessionBeforeCompactEvent,
+			ctx: ExtensionContext,
+		) => Promise<unknown>,
 	): void;
 	on(
 		event: "session_compact",
-		handler: (event: SessionCompactEvent, ctx: ExtensionContext) => Promise<unknown>,
+		handler: (
+			event: SessionCompactEvent,
+			ctx: ExtensionContext,
+		) => Promise<unknown>,
 	): void;
 	on(
 		event: "command_end",
-		handler: (event: CommandEndEvent, ctx: ExtensionContext) => Promise<unknown>,
+		handler: (
+			event: CommandEndEvent,
+			ctx: ExtensionContext,
+		) => Promise<unknown>,
 	): void;
 }
